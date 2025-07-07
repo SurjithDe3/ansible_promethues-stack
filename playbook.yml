@@ -1,0 +1,51 @@
+---
+- name: Install and deploy Prometheus stack using Docker
+  hosts: prometheus_nodes
+  become: yes
+  tasks:
+    - name: Install required packages
+      apt:
+        name: "{{ item }}"
+        state: present
+        update_cache: yes
+      loop:
+        - docker.io
+        - curl
+
+    - name: Create Docker CLI plugins directory
+      file:
+        path: /usr/local/lib/docker/cli-plugins
+        state: directory
+        mode: '0755'
+
+    - name: Install Docker Compose v2 plugin
+      get_url:
+        url: https://github.com/docker/compose/releases/download/v2.24.6/docker-compose-linux-x86_64
+        dest: /usr/local/lib/docker/cli-plugins/docker-compose
+        mode: '0755'
+
+    - name: Ensure Docker is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Create Prometheus target directory
+      file:
+        path: /root/prometheus-stack
+        state: directory
+        mode: '0755'
+
+    - name: Copy Prometheus stack files to remote host
+      copy:
+        src: files/
+        dest: /root/prometheus-stack/
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Launch Prometheus stack using Docker Compose v2
+      command: docker compose up -d
+      args:
+        chdir: /root/prometheus-stack
+

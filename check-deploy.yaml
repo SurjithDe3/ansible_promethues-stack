@@ -1,0 +1,72 @@
+---
+- name: Conditionally install Docker, Docker Compose, and deploy Prometheus stack
+  hosts: prometheus_nodes
+  become: true
+  tasks:
+
+    - name: Check if Prometheus is already running
+      shell: docker ps --filter "name=prometheus" --format "{{'{{'}}.Names{{'}}'}}"
+      register: prometheus_running
+      ignore_errors: true
+
+    - name: Debug Prometheus container state
+      debug:
+        msg: "Prometheus is already running: {{ prometheus_running.stdout }}"
+      when: prometheus_running.stdout != ""
+
+    - block:
+        - name: Check if Docker is already installed
+          command: which docker
+          register: docker_installed
+          ignore_errors: true
+
+        - name: Install Docker if not present
+          apt:
+            name: docker.io
+            state: present
+            update_cache: yes
+          when: docker_installed.rc != 0
+
+        - name: Start and enable Docker
+          service:
+            name: docker
+            state: started
+            enabled: true
+
+        - name: Check if Docker Compose (v2) is already installed
+          command: docker compose version
+          register: compose_installed
+          ignore_errors: true
+
+        - name: Create Docker CLI plugins directory
+          file:
+            path: /usr/libexec/docker/cli-plugins
+            state: directory
+            mode: '0755'
+          when: compose_installed.rc != 0
+
+        - name: Install Docker Compose v2 binary
+          get_url:
+            url: https://github.com/docker/compose/releases/download/v2.24.4/docker-compose-linux-x86_64
+            dest: /usr/libexec/docker/cli-plugins/docker-compose
+            mode: '0755'
+          when: compose_installed.rc != 0
+
+        - name: Ensure Prometheus target directory exists
+          file:
+            path: /root/prometheus-stack
+            state: directory
+
+        - name: Copy Prometheus stack files
+          copy:
+            src: files/prometheus-stack/
+            dest: /root/prometheus-stack/
+            owner: root
+            group: root
+            mode: '0755'
+
+        - name: Deploy Prometheus stack using Docker Compose
+          shell: |
+            cd /root/prometheus-stack && docker compose up -d
+      when: prometheus_running.stdout == ""
+

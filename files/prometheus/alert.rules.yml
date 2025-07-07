@@ -1,0 +1,148 @@
+groups:
+  - name: extended_vm_alerts
+    rules:
+      # ✅ Basic Uptime
+      - alert: InstanceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} is down"
+          description: "Prometheus target {{ $labels.instance }} is unreachable."
+
+      # ✅ CPU
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100) > 85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage > 85% for 2 minutes."
+
+      # ✅ Memory
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.9
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage > 90%."
+
+      - alert: OutOfMemory
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} is almost out of memory"
+          description: "Less than 5% memory available."
+
+      # ✅ Swap
+      - alert: SwapUsageHigh
+        expr: (node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes) / node_memory_SwapTotal_bytes > 0.5
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High swap usage on {{ $labels.instance }}"
+          description: "Swap usage > 50%."
+
+      # ✅ Load Average
+      - alert: HighLoadAverage1m
+        expr: node_load1 > count(count(node_cpu_seconds_total{mode="system"}) by (cpu)) by (instance)
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 1m load on {{ $labels.instance }}"
+          description: "Load is greater than CPU cores."
+
+      # ✅ Disk
+      - alert: HighDiskUsage
+        expr: (node_filesystem_size_bytes{fstype!~"tmpfs|squashfs|overlay"} - node_filesystem_free_bytes{fstype!~"tmpfs|squashfs|overlay"}) / node_filesystem_size_bytes{fstype!~"tmpfs|squashfs|overlay"} > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk usage > 90% on {{ $labels.instance }} - {{ $labels.mountpoint }}"
+          description: "Available disk space is critically low."
+
+      - alert: DiskAlmostFull
+        expr: predict_linear(node_filesystem_free_bytes{fstype!~"tmpfs|squashfs|overlay"}[1h], 3600) < 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk will fill within 1 hour on {{ $labels.instance }}"
+          description: "Projected disk exhaustion based on last hour’s trend."
+
+      - alert: DiskReadOnly
+        expr: node_filesystem_readonly == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk is read-only on {{ $labels.instance }} - {{ $labels.mountpoint }}"
+          description: "Check disk for file system errors or remount issues."
+
+      # ✅ Network
+      - alert: NetworkReceiveErrors
+        expr: increase(node_network_receive_errs_total[1m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Network RX errors on {{ $labels.instance }}"
+          description: "Interface {{ $labels.device }} received errors."
+
+      - alert: NetworkTransmitErrors
+        expr: increase(node_network_transmit_errs_total[1m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Network TX errors on {{ $labels.instance }}"
+          description: "Interface {{ $labels.device }} has transmit errors."
+
+      # ✅ File Descriptors
+      - alert: FileDescriptorUsage
+        expr: node_filefd_allocated / node_filefd_maximum > 0.8
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "File descriptor usage is > 80% on {{ $labels.instance }}"
+          description: "May cause service failure if not addressed."
+
+      # ✅ Process Monitoring
+      - alert: TooManyProcesses
+        expr: node_processes_running > 300
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Too many processes on {{ $labels.instance }}"
+          description: "Running processes > 300."
+
+      # ✅ Time Sync
+      - alert: ClockSkew
+        expr: abs(node_time_seconds - time()) > 60
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Clock skew > 60s on {{ $labels.instance }}"
+          description: "NTP sync issue may affect logs or authentication."
+
+      # ✅ System Reboot
+      - alert: NodeRebooted
+        expr: time() - node_boot_time_seconds < 300
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "Node {{ $labels.instance }} has rebooted recently"
+          description: "System uptime is less than 5 minutes."
